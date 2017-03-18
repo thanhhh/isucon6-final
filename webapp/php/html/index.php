@@ -79,16 +79,38 @@ function typeCastRoomData($data) {
     ];
 }
 
+////////////////////////
+// Memcached
+////////////////////////
+function getMemcached() {
+    $host = getenv('MEMCACHED_HOST') ?: 'localhost';
+    $port = getenv('MEMCACHED_PORT') ?: 11211;
+
+    $mc = new Memcached(); 
+    $mc->addServer($host, $port); 
+    return $mc;
+}
 
 class TokenException extends Exception {}
 
 function checkToken($dbh, $csrf_token) {
+    $mc = getMemcached();
+
+    $value = $mc->get($csrf_token);
+
+    if ($value) {
+        return json_decode($value);
+    }
+
     $sql = 'SELECT `id`, `csrf_token`, `created_at` FROM `tokens`';
     $sql .= ' WHERE `csrf_token` = :csrf_token AND `created_at` > CURRENT_TIMESTAMP(6) - INTERVAL 1 DAY';
     $token = selectOne($dbh, $sql, [':csrf_token' => $csrf_token]);
     if (is_null($token)) {
         throw new TokenException();
     }
+
+    $mc->set($csrf_token, json_encode($token), 86400);
+
     return $token;
 }
 
@@ -99,8 +121,25 @@ function getStrokePoints($dbh, $stroke_id) {
 
 function getStrokes($dbh, $room_id, $greater_than_id) {
     $sql = 'SELECT `id`, `room_id`, `width`, `red`, `green`, `blue`, `alpha`, `created_at` FROM `strokes`';
-    $sql .= ' WHERE `room_id` = :room_id AND `id` > :greater_than_id ORDER BY `id` ASC';
-    return selectAll($dbh, $sql, [':room_id' => $room_id, ':greater_than_id' => $greater_than_id]);
+
+    $sql .= ' WHERE `room_id` = :room_id';
+
+    if ($greater_than_id > 0) {
+        $sql .= ' AND `id` > :greater_than_id ORDER BY `id` ASC'; 
+
+        return selectAll($dbh, $sql, [':room_id' => $room_id, ':greater_than_id' => $greater_than_id]);
+    }
+
+    $sql .= ' ORDER BY `id` ASC';
+    
+    return selectAll($dbh, $sql, [':room_id' => $room_id]);
+}
+
+function getCountStrokes($dbh, $room_id) {
+    $sql = 'SELECT COUNT(*) as `stroke_count` FROM `strokes` WHERE `room_id` = :room_id';
+    
+    $result = selectOne($dbh, $sql, [':room_id' => $room_id]);
+    return $result['stroke_count'];
 }
 
 function getRoom($dbh, $room_id) {
@@ -158,6 +197,10 @@ $app->post('/api/csrf_token', function ($request, $response, $args) {
     $sql = 'SELECT `id`, `csrf_token`, `created_at` FROM `tokens` WHERE id = :id';
     $token = selectOne($dbh, $sql, [':id' => $id]);
 
+    $mc = getMemcached();
+
+    $mc->set($csrf_token, json_encode($token), 86400);
+
     return $response->withJson(['token' => $token['csrf_token']]);
 });
 
@@ -171,7 +214,7 @@ $app->get('/api/rooms', function ($request, $response, $args) {
     $rooms = [];
     foreach ($results as $result) {
         $room = getRoom($dbh, $result['room_id']);
-        $room['stroke_count'] = count(getStrokes($dbh, $room['id'], 0));
+        $room['stroke_count'] = getCountStrokes($dbh, $room['id']);//count(getStrokes($dbh, $room['id'], 0));
         $rooms[] = $room;
     }
 
