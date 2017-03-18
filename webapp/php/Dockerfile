@@ -1,6 +1,6 @@
-FROM php:7.0.12-apache
+FROM php:7.1.3-apache
 
-RUN docker-php-ext-install pdo pdo_mysql
+RUN docker-php-ext-install pdo pdo_mysql memcached
 
 RUN apt-get update && apt-get install -y unzip
 

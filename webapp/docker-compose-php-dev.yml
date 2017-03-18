@@ -1,5 +1,9 @@
 version: '2'
 services:
+  memcached:
+    extends: 
+      file: docker-compose-memcached.yml
+      service: memcached
   mysql:
     extends:
       file: docker-compose-mysql.yml
@@ -11,8 +15,10 @@ services:
     volumes:
       - ./php/html:/var/www/html:ro
     depends_on:
+      - memcached
       - mysql
     links:
+      - memcached
       - mysql
     environment:
       ISUCON_ENV: development
