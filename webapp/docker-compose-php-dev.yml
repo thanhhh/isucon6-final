@@ -20,6 +20,8 @@ services:
       MYSQL_PORT: 3306
       MYSQL_USER: isucon
       MYSQL_PASS: isucon
+    ports:
+      - "8000:80"
   react_dev:
     extends:
       file: docker-compose-react.yml
