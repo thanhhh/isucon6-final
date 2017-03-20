@@ -82,13 +82,17 @@ function typeCastRoomData($data) {
 ////////////////////////
 // Memcached
 ////////////////////////
+static $cached = NULL;
 function getMemcached() {
-    $host = getenv('MEMCACHED_HOST') ?: 'localhost';
+    if ($cached != NULL) {
+        return $cached;
+    }
+    $host = getenv('MEMCACHED_HOST') ?: 'memcached';
     $port = getenv('MEMCACHED_PORT') ?: 11211;
 
-    $mc = new Memcached(); 
-    $mc->addServer($host, $port); 
-    return $mc;
+    $cached = new Memcached(); 
+    $cached->addServer($host, $port); 
+    return $cached;
 }
 
 class TokenException extends Exception {}
@@ -99,7 +103,7 @@ function checkToken($dbh, $csrf_token) {
     $value = $mc->get($csrf_token);
 
     if ($value) {
-        return json_decode($value);
+        return $value;
     }
 
     $sql = 'SELECT `id`, `csrf_token`, `created_at` FROM `tokens`';
@@ -109,7 +113,7 @@ function checkToken($dbh, $csrf_token) {
         throw new TokenException();
     }
 
-    $mc->set($csrf_token, json_encode($token), 86400);
+    $mc->set($csrf_token, $token, 86400);
 
     return $token;
 }
@@ -148,16 +152,59 @@ function getRoom($dbh, $room_id) {
 }
 
 function getWatcherCount($dbh, $room_id) {
-    $sql = 'SELECT COUNT(*) AS `watcher_count` FROM `room_watchers`';
-    $sql .= ' WHERE `room_id` = :room_id AND `updated_at` > CURRENT_TIMESTAMP(6) - INTERVAL 3 SECOND';
-    $result = selectOne($dbh, $sql, [':room_id' => $room_id]);
-    return $result['watcher_count'];
+    // $sql = 'SELECT COUNT(*) AS `watcher_count` FROM `room_watchers`';
+    // $sql .= ' WHERE `room_id` = :room_id AND `updated_at` > CURRENT_TIMESTAMP(6) - INTERVAL 3 SECOND';
+    // $result = selectOne($dbh, $sql, [':room_id' => $room_id]);
+    // return $result['watcher_count'];
+
+    $watcher_count = 0;
+
+    $mc = getMemcached();
+
+    $watcher_key = 'watcher_' . $room_id;
+
+    $keys = $mc->get($watcher_key);
+    if ($keys) {
+        $result = $mc->getMulti($keys);
+
+        if ($result) {
+            $new_keys = [];
+            foreach($result as $key => $value) {
+                $watcher_count++;
+                $new_keys[] = $key;
+            }
+
+            if (count($new_keys) > 0) {
+                $mc->set($watcher_key, $new_keys, 3);
+            }
+        }
+    }
+
+    return $watcher_count;
 }
 
 function updateRoomWatcher($dbh, $room_id, $token_id) {
-    $sql = 'INSERT INTO `room_watchers` (`room_id`, `token_id`) VALUES (:room_id, :token_id)';
-    $sql .= ' ON DUPLICATE KEY UPDATE `updated_at` = CURRENT_TIMESTAMP(6)';
-    execute($dbh, $sql, [':room_id' => $room_id, ':token_id' => $token_id]);
+    // $sql = 'INSERT INTO `room_watchers` (`room_id`, `token_id`) VALUES (:room_id, :token_id)';
+    // $sql .= ' ON DUPLICATE KEY UPDATE `updated_at` = CURRENT_TIMESTAMP(6)';
+    // execute($dbh, $sql, [':room_id' => $room_id, ':token_id' => $token_id]);
+
+    $watcher_key = 'watcher_' . $room_id;
+
+    $mc = getMemcached();
+    $key = 'rw_' . $room_id . '_' . $token_id;
+
+    $mc->set($key, $key, 3);
+
+    $keys = $mc->get($watcher_key);
+    if ($keys) {
+        array_push($keys, $key);
+    }
+    else {
+        $keys = [];
+        $keys[] = $key;
+    }
+
+    $mc->set($watcher_key, $keys, 3);
 }
 
 // Instantiate the app
@@ -199,7 +246,7 @@ $app->post('/api/csrf_token', function ($request, $response, $args) {
 
     $mc = getMemcached();
 
-    $mc->set($csrf_token, json_encode($token), 86400);
+    $mc->set($csrf_token, $token, 86400);
 
     return $response->withJson(['token' => $token['csrf_token']]);
 });
