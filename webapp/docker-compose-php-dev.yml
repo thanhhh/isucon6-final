@@ -4,6 +4,10 @@ services:
     extends: 
       file: docker-compose-memcached.yml
       service: memcached
+#  redis:
+#    extends: 
+#      file: docker-compose-redis.yml
+#      service: redis
   mysql:
     extends:
       file: docker-compose-mysql.yml
@@ -16,9 +20,11 @@ services:
       - ./php/html:/var/www/html:ro
     depends_on:
       - memcached
+#      - redis
       - mysql
     links:
       - memcached
+#      - redis
       - mysql
     environment:
       ISUCON_ENV: development
