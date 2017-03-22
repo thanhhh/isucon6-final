@@ -5,6 +5,7 @@ require_once __DIR__ . '/../lib/db.php';
 require_once __DIR__ . '/../lib/transfomation.php';
 require_once __DIR__ . '/../lib/cached.php';
 require_once __DIR__ . '/../lib/api-helper.php';
+require_once __DIR__ . '/../lib/token.php';
 
 function printAndFlush($content) {
     print($content);
@@ -44,7 +45,7 @@ $container['logger'] = function ($c) {
 $app->post('/api/csrf_token', function ($request, $response, $args) {
     $dbh = getPDO();
 
-    $token = creteToken($dbh);
+    $token = createToken($dbh);
 
     return $response->withJson(['token' => $token['csrf_token']]);
 });
