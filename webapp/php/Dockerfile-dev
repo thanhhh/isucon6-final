@@ -19,3 +19,5 @@ COPY . /var/www
 WORKDIR /var/www
 
 RUN ./composer.phar install
+
+#CMD ["php", "./cmd/bootstrap.php"]

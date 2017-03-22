@@ -13,4 +13,4 @@ RUN \
   glide install && \
   make
 
-#CMD ["./local-bench", "-urls", "https://react", "-timeout", "30"]
+CMD ["./local-bench", "-urls", "https://react_dev", "-timeout", "30"]

@@ -32,6 +32,8 @@ services:
       MYSQL_PORT: 3306
       MYSQL_USER: isucon
       MYSQL_PASS: isucon
+      MEMCACHED_HOST: memcached
+      MEMCACHED_PORT: 11211
     ports:
       - "8000:80"
   react_dev:
